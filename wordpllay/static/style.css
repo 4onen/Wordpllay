@@ -58,3 +58,27 @@ button {
 #game_text:empty {
     display: none;
 }
+
+.box_radio>input {
+    display: none;
+}
+
+.box_radio>label {
+    display: block;
+}
+
+.box_radio>label:not(:first-of-type) {
+    border-top: 1px solid;
+}
+
+.box_radio>input+label::before {
+    content: "[ ] ";
+}
+
+.box_radio>input:checked+label::before {
+    content: "[x] ";
+}
+
+.box_radio>input:checked+label {
+    color: #ffa0a0;
+}

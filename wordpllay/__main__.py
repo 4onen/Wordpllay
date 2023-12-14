@@ -103,6 +103,11 @@ class SingleTask:
             self.task = None
 
 
+DIFFICULTY_LIST = ["easy", "normal", "hard"]
+
+DifficultyType = Literal["easy", "normal", "hard"]
+
+
 class GameSession(NamedTuple):
     """
     Handle a single websocket connection from a client.
@@ -224,11 +229,41 @@ class GameSession(NamedTuple):
             )
             return success(None)
 
-    async def execute_prompt(self, prompt: str) -> None:
+    async def execute_prompt(
+        self, prompt: str, difficulty: DifficultyType
+    ) -> None:
         """
         Execute a prompt from the client.
         """
-        await self.send_output("", state="processing")
+
+        stopped_msg = ""
+        if difficulty not in DIFFICULTY_LIST:
+            logging.info(
+                'Session %s: Difficulty %r unrecognized, assumed "easy"',
+                self.sid,
+                prompt,
+            )
+            stopped_msg = (
+                f'Difficulty "{difficulty}" not recognized. Assuming "easy"...'
+            )
+            difficulty = "easy"
+
+        if difficulty != "easy":
+            contained_words = [
+                word for word in self.random_words if word in prompt
+            ]
+            if contained_words:
+                await self.send_output(
+                    "Nope.",
+                    state="loser",
+                    stopped=stopped_msg
+                    + f"Your prompt contains {contained_words} which are in"
+                    f' your target words! On "{difficulty}" difficulty,'
+                    " this is not allowed.",
+                )
+                return
+
+        await self.send_output("", state="processing", stopped=stopped_msg)
 
         logging.info("Session %s: Executing prompt: %s", self.sid, prompt)
 
@@ -341,9 +376,11 @@ class GameSession(NamedTuple):
                 "Please keep under 200 characters."
             )
 
+        difficulty = recieved.get("difficulty")
+
         return self.prompt_session.start(
             asyncio.create_task(
-                self.execute_prompt(prompt), name="prompt_exec"
+                self.execute_prompt(prompt, difficulty), name="prompt_exec"
             )
         )
 
@@ -355,10 +392,6 @@ class GameSession(NamedTuple):
         async for msg in self.ws:
             if msg.type == web.WSMsgType.TEXT:
                 new_game = await self.handle_form_message(msg.data)
-                logging.info(
-                    "Session %s: Loop continued after text message processing.",
-                    self.sid,
-                )
                 if new_game:
                     break
             elif msg.type == web.WSMsgType.ERROR:

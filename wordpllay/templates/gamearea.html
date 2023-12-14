@@ -3,6 +3,21 @@
         <span id="words">{{ random_words }}</span>
     </b>
     <form id="game_inputs" ws-send>
+        <fieldset class="box_radio">
+            <input id="difficulty_easy" type="radio" name="difficulty"
+                value="easy" />
+            <label for="difficulty_easy"><b>Easy</b>
+                <p>Use any words and the model is instructed to respond
+                    appropriately.</p>
+            </label>
+            <input id="difficulty_normal" type="radio" name="difficulty"
+                value="normal" checked />
+            <label for="difficulty_normal"><b>Normal</b>
+                <p>Use any prompt <i>that does not include your target words</i>
+                    and the model is instructed to respond appropriately.</p>
+                </b>
+            </label>
+        </fieldset>
         <input type="text" name="prompt" maxlength="200"></input>
         <div id="game_output">
             <div id="game_text"></div>
