@@ -1,0 +1,60 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    padding-left: max(20svw, 1em);
+    padding-right: max(20svw, 1em);
+}
+
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: #333;
+        color: #fff;
+    }
+}
+
+#game_area {
+    text-align: center;
+}
+
+input[type="text"] {
+    width: 100%;
+    background-color: transparent;
+    padding: 12px 20px;
+    margin: 8px 0;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+    color: inherit;
+}
+
+button {
+    background-color: aliceblue;
+    padding: 12px 20px;
+    margin: auto;
+    width: 5em;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+.error_output {
+    color: #ff0000;
+}
+
+#game_text {
+    width: 100%;
+    padding: 12px 20px;
+    margin: 8px 0;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+    text-align: left;
+    font-family: monospace;
+}
+
+#game_text:empty {
+    display: none;
+}

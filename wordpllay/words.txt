@@ -1,0 +1,7 @@
+apple
+banana
+apricot
+avocado
+staple
+stapler
+fastener

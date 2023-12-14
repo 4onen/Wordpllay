@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Wordpllay</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js"></script>
+    <script src="/static/ws.js"></script>
+</head>
+
+<body hx-ext="ws" ws-connect="/ws">
+    <h1>Wordpllay</h1>
+    <p>Welcome to Wordpllay! In this game, enter a prompt to get the large
+        language model to use certain words, but without using those words
+        directly. For example, if you are supposed to tell the model to say
+        "apricot" then you might ask it to "List the colloquial name of the
+        fruit with the scientific name Prunus sect. Armeniaca."</p>
+    <div id="game_area">
+        <pre>Connecting... <noscript>Failed! Please enable javascript to play.</noscript></pre>
+    </div>
+</body>
+
+</html>

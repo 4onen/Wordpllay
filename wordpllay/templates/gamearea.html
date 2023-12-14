@@ -1,0 +1,14 @@
+<div id="game_area">
+    <b>Your words for this game are
+        <span id="words">{{ random_words }}</span>
+    </b>
+    <form id="game_inputs" ws-send>
+        <input type="text" name="prompt" maxlength="200"></input>
+        <div id="game_output">
+            <div id="game_text"></div>
+            <div id="game_buttons">
+                <button>Go!</button>
+            </div>
+        </div>
+    </form>
+</div>

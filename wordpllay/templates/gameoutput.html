@@ -1,0 +1,23 @@
+<div id="game_output">
+    <div id="game_text" class="{{classes}}">{{text}}</div>
+    <div id="game_buttons">
+        {% if stopped %}
+        <p>Stopped. {{stopped}}</p>
+        {% endif %}
+        {% if state=="winner" %}
+        <h2>🎉 You win! 🎉</h2>
+        <br />
+        <button name="next_game">New Game</button>
+        <button name="reset_output">Same Again</button>
+        {% elif state=="loser" %}
+        <h2>Failed.</h2>
+        <br />
+        <button name="reset_output">Try Again</button>
+        <button name="new_game">New Game</button>
+        {% elif state=="processing" %}
+        <button name="stop">Stop</button>
+        {% else %}
+        <button>Go</button>
+        {% endif %}
+    </div>
+</div>
