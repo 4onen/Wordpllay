@@ -273,6 +273,7 @@ class GameSession(NamedTuple):
             """
             Collect chunks of output.
             """
+            chunk = chunk.replace("\n", "<br/>")
             collected_chunks.append(chunk)
             await self.send_output_chunk(chunk)
             await asyncio.sleep(0)
@@ -281,11 +282,13 @@ class GameSession(NamedTuple):
         stopped = ""
 
         try:
-            result = await SERVER_LLM.generate_async(
-                prompt,
-                chunk_writer=chunk_writer,
-                max_tokens=100,
-            )
+            result = (
+                await SERVER_LLM.generate_async(
+                    prompt,
+                    chunk_writer=chunk_writer,
+                    max_tokens=100,
+                )
+            ).replace("\n", "<br/>")
         except asyncio.CancelledError as exc:
             logging.info(
                 "Session %s: Prompt execution cancelled: %s", self.sid, exc

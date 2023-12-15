@@ -1,5 +1,5 @@
 <div id="game_output">
-    <div id="game_text" class="{{classes}}">{{text}}</div>
+    <div id="game_text" class="{{classes}}">{{text|safe}}</div>
     <div id="game_buttons">
         {% if stopped %}
         <p>Stopped. {{stopped}}</p>
