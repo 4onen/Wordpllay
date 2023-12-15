@@ -304,7 +304,9 @@ class GameSession(NamedTuple):
             error_message = f"<br/>ERROR: {exc}"
             result = "".join(collected_chunks)
 
-        won = all(word in result for word in self.random_words)
+        lowered_result = result.lower()
+
+        won = all(word in lowered_result for word in self.random_words)
 
         await self.send_output(
             result + error_message,
