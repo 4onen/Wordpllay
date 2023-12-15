@@ -249,8 +249,9 @@ class GameSession(NamedTuple):
             difficulty = "easy"
 
         if difficulty != "easy":
+            lowered_prompt = prompt.lower()
             contained_words = [
-                word for word in self.random_words if word in prompt
+                word for word in self.random_words if word in lowered_prompt
             ]
             if contained_words:
                 await self.send_output(
