@@ -19,7 +19,7 @@ from aiohttp import web
 import jinja2
 
 
-PROMPT_LIMIT: int = 200  # characters
+PROMPT_LIMIT: int = 140  # utf-8 characters
 
 
 _WORDLIST: Optional[Sequence[str]] = None
@@ -161,6 +161,7 @@ class GameSession(NamedTuple):
                 "gamearea.html"
             ).render(
                 random_words=self.random_words,
+                MAX_PROMPT_LENGTH=PROMPT_LIMIT,
             )
         except Exception as exc:  # pylint: disable=broad-except
             logging.exception(
@@ -379,14 +380,15 @@ class GameSession(NamedTuple):
             )
             return self.send_err(
                 "ERROR: Prompt sent by client is too long. "
-                "Please keep under 200 characters."
+                f"Please keep under {PROMPT_LIMIT} UTF-8 characters."
             )
 
         difficulty = recieved.get("difficulty")
 
         return self.prompt_session.start(
             asyncio.create_task(
-                self.execute_prompt(prompt, difficulty), name="prompt_exec"
+                self.execute_prompt(prompt[:PROMPT_LIMIT], difficulty),
+                name="prompt_exec",
             )
         )
 
