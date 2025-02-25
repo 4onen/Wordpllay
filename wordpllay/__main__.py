@@ -1,14 +1,17 @@
 """
 The wordpllay server.
 """
+
 import asyncio
 import json
+import os
 from pathlib import Path
 import logging
 from typing import (
+    TYPE_CHECKING,
     Any,
-    Callable,
     Coroutine,
+    Final,
     Literal,
     NamedTuple,
     Optional,
@@ -18,11 +21,16 @@ import numpy.random
 from aiohttp import web
 import jinja2
 
+if TYPE_CHECKING:
+    from . import llm
 
-PROMPT_LIMIT: int = 140  # utf-8 characters
 
+PROMPT_LIMIT: Final[int] = 140  # utf-8 characters
+API_KEY_NOT_SET: Final[Literal["API_KEY_NOT_SET"]] = "API_KEY_NOT_SET"
 
 _WORDLIST: Optional[Sequence[str]] = None
+
+SERVER_LLM: "llm.LLM"
 
 
 def get_random_words(seed: int) -> Sequence[str]:
@@ -37,7 +45,7 @@ def get_random_words(seed: int) -> Sequence[str]:
 
     gen = numpy.random.default_rng(seed)
     word_count = gen.integers(1, 3)
-    return gen.choice(_WORDLIST, word_count, replace=False)
+    return gen.choice(_WORDLIST, word_count, replace=False)  # type: ignore
 
 
 def success(a: Any) -> asyncio.Future[Any]:
@@ -54,22 +62,6 @@ async def index_handler(_) -> web.FileResponse:
     Serve the index page.
     """
     return web.FileResponse(SERVER_ROOT / "static" / "index.html")
-
-
-async def dumb_llm(
-    prompt: str, chunk_writer: Callable[[str], Any] = None
-) -> str:
-    """
-    Run the language model on a prompt.
-    """
-    output = f'Looking at the prompt "{prompt}", I think that I should respond with... uh... idk.'
-
-    for word in output.split():
-        if chunk_writer:
-            await chunk_writer(" " + word)
-        await asyncio.sleep(0.2)
-
-    return output
 
 
 class SingleTask:
@@ -145,11 +137,9 @@ class GameSession(NamedTuple):
         """
         Create a game session from an established websocket connection.
         """
-        sid = numpy.random.randint(0, 2**32)
+        sid = numpy.random.randint(0, 2**31 - 1)
         random_words = get_random_words(sid)
-        logging.info(
-            "Session %s: Starting with random words: %s", sid, random_words
-        )
+        logging.info("Session %s: Starting with random words: %s", sid, random_words)
         return GameSession(app, ws, sid, random_words, SingleTask())
 
     def send_gamearea(self) -> Coroutine[None, None, None]:
@@ -157,9 +147,7 @@ class GameSession(NamedTuple):
         Send the textarea form to the client.
         """
         try:
-            rendered_template = self.jinja_env.get_template(
-                "gamearea.html"
-            ).render(
+            rendered_template = self.jinja_env.get_template("gamearea.html").render(
                 random_words=self.random_words,
                 MAX_PROMPT_LENGTH=PROMPT_LIMIT,
             )
@@ -186,9 +174,7 @@ class GameSession(NamedTuple):
         Send a completed output message to the client.
         """
         try:
-            rendered_template = self.jinja_env.get_template(
-                "gameoutput.html"
-            ).render(
+            rendered_template = self.jinja_env.get_template("gameoutput.html").render(
                 text=msg,
                 classes=classes,
                 stopped=stopped,
@@ -218,9 +204,7 @@ class GameSession(NamedTuple):
         """
         try:
             return self.ws.send_str(
-                self.jinja_env.get_template("gamepartialoutput.html").render(
-                    text=chunk
-                )
+                self.jinja_env.get_template("gamepartialoutput.html").render(text=chunk)
             )
         except Exception as exc:  # pylint: disable=broad-except
             logging.exception(
@@ -230,9 +214,7 @@ class GameSession(NamedTuple):
             )
             return success(None)
 
-    async def execute_prompt(
-        self, prompt: str, difficulty: DifficultyType
-    ) -> None:
+    async def execute_prompt(self, prompt: str, difficulty: DifficultyType) -> None:
         """
         Execute a prompt from the client.
         """
@@ -292,9 +274,7 @@ class GameSession(NamedTuple):
                 )
             ).replace("\n", "<br/>")
         except asyncio.CancelledError as exc:
-            logging.info(
-                "Session %s: Prompt execution cancelled: %s", self.sid, exc
-            )
+            logging.info("Session %s: Prompt execution cancelled: %s", self.sid, exc)
             stopped = str(exc)
             result = "".join(collected_chunks)
         except Exception as exc:  # pylint: disable=broad-except
@@ -333,9 +313,7 @@ class GameSession(NamedTuple):
                 self.sid,
                 err,
             )
-            return self.send_err(
-                "ERROR: Unable to decode JSON sent by client."
-            )
+            return self.send_err("ERROR: Unable to decode JSON sent by client.")
 
         if not isinstance(recieved, dict):
             logging.warning(
@@ -343,9 +321,7 @@ class GameSession(NamedTuple):
                 self.sid,
                 recieved,
             )
-            return self.send_err(
-                "ERROR: Unable to decode JSON sent by client."
-            )
+            return self.send_err("ERROR: Unable to decode JSON sent by client.")
 
         if "stop" in recieved:
             logging.info("Session %s: Client requested stop.", self.sid)
@@ -354,9 +330,7 @@ class GameSession(NamedTuple):
             logging.info("Session %s: Client requested new game.", self.sid)
             return success(True)
         if "reset_output" in recieved:
-            logging.info(
-                "Session %s: Client requested output reset.", self.sid
-            )
+            logging.info("Session %s: Client requested output reset.", self.sid)
             return self.send_output("", state="ready")
         if "new_game" in recieved:
             logging.info("Session %s: Client requested new game.", self.sid)
@@ -383,7 +357,18 @@ class GameSession(NamedTuple):
                 f"Please keep under {PROMPT_LIMIT} UTF-8 characters."
             )
 
-        difficulty = recieved.get("difficulty")
+        difficulty_raw = recieved.get("difficulty")
+
+        difficulty: DifficultyType
+        if difficulty_raw in DIFFICULTY_LIST:
+            difficulty = difficulty_raw  # type: ignore
+        else:
+            logging.info(
+                'Session %s: Difficulty %r unrecognized, assumed "normal"',
+                self.sid,
+                difficulty_raw,
+            )
+            difficulty = "normal"
 
         return self.prompt_session.start(
             asyncio.create_task(
@@ -467,25 +452,69 @@ def main() -> None:
     web.run_app(app, host="localhost", port=8000)
 
 
+def print_usage():
+    "Prints the usage information."
+    print("Usage: python3 -m wordpllay [-h|--help] <model_url>")
+
+
+def print_help():
+    "Prints the help information -- assumes usage is already printed."
+    print(
+        """
+model_url must be a valid OpenAI-compatible URL or one of the following:
++ llama_cpp  A llama.cpp server running on 127.0.0.1:8080
++ openai     The default OpenAI API endpoint
+
+The following environment variables can be customized:
+OPENAI_API_KEY      The API key for the OpenAI API.
+                    Default: "API_KEY_NOT_SET"
+OPENAI_API_MODEL    The model to specify to your endpoint.
+                    Default: "gpt-4o-mini-latest"
+"""
+    )
+
+
 if __name__ == "__main__":
     SERVER_ROOT = Path(__file__).parent
     logging.basicConfig(level=logging.INFO)
 
     import sys
 
-    if len(sys.argv) < 2:
-        print(
-            "WARNING: No language model specified. Using an extremely dumb llm."
+    if any(arg.lower() in ["-h", "--help"] for arg in sys.argv[1:]):
+        print_usage()
+        print_help()
+        sys.exit(0)
+
+    if len(sys.argv) != 2:
+        print_usage()
+        sys.exit(1)
+
+    model_url = sys.argv[1]
+
+    import pydantic
+    import dotenv
+
+    dotenv.load_dotenv()
+
+    api_key = pydantic.SecretStr(os.getenv("OPENAI_API_KEY") or API_KEY_NOT_SET)
+    model_name = os.getenv("OPENAI_API_MODEL", "gpt-4o-mini-latest")
+
+    base_url: Optional[str]
+    match model_url.lower():
+        case "llama_cpp":
+            base_url = "http://127.0.0.1:8080"
+        case "openai":
+            base_url = None
+        case _:
+            base_url = model_url
+
+    import langchain_openai
+    from . import llm
+
+    SERVER_LLM = llm.LLM(
+        langchain_openai.ChatOpenAI(
+            base_url=base_url, api_key=api_key, model=model_name
         )
-        SERVER_LLM = dumb_llm
-    else:
-        model_path = Path(sys.argv[1])
-        if not model_path.exists():
-            print(f"ERROR: Model path {model_path} does not exist.")
-            sys.exit(1)
-
-        from wordpllay.llm import LLM
-
-        SERVER_LLM = LLM(model_path)
+    )
 
     main()

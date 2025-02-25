@@ -1,83 +1,20 @@
 """
 This module provides a wrapper around our calls out to the language model.
 """
+
 import logging
-from pathlib import Path
 import asyncio
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    NamedTuple,
     Optional,
 )
-from llama_cpp import Llama
 
+if TYPE_CHECKING:
+    from langchain_core.language_models import BaseChatModel
 
-class PromptFormat(NamedTuple):
-    """
-    A prompt format is a pair of a name and a format string. The format string
-    should contain a single {instruction} placeholder, which will be replaced
-    with the instruction.
-
-    We do not accept more complex formats because I'm lazy and I've seen only
-    limited utility for them for plain assistant models.
-    """
-
-    name: str
-    format: str
-
-    def with_instruction(self, instruction: str) -> str:
-        """
-        Returns a string with the instruction formatted into the format string.
-        """
-        return self.format.format(instruction=instruction)
-
-    def __str__(self) -> str:
-        return self.name
-
-
-ALPACA_PROMPT_FORMAT = PromptFormat(
-    "Alpaca",
-    """### Instruction:
-{instruction}
-
-### Response:
-""",
-)
-
-KNOWN_PROMPT_FORMATS: Dict[str, PromptFormat] = {
-    "chupacabra": ALPACA_PROMPT_FORMAT,
-}
-
-
-def prompt_format_guess(model_path: Path) -> PromptFormat:
-    """
-    Guesses the prompt format for a model identifier. This is a heuristic and
-    may not be correct. If no format can be guessed, a default, common format
-    is returned.
-    """
-    model_identifier = model_path.name
-
-    prompt_format = None
-
-    for model_identifier_fragment, new_format in KNOWN_PROMPT_FORMATS.items():
-        if model_identifier_fragment in model_identifier:
-            if prompt_format is not None:
-                logging.warning(
-                    "Multiple prompt formats match model identifier! Switching from %s to %s",
-                    prompt_format,
-                    new_format,
-                )
-            prompt_format = new_format
-
-    if prompt_format is None:
-        prompt_format = ALPACA_PROMPT_FORMAT
-        logging.warning("No prompt format guess! Assuming %s.", prompt_format)
-    else:
-        logging.info("Prompt format guess: %s", prompt_format)
-
-    return prompt_format
+logger = logging.getLogger(__name__)
 
 
 class LLM:
@@ -87,9 +24,8 @@ class LLM:
 
     __slots__ = ("model", "prompt_format")
 
-    def __init__(self, model_path: Path):
-        self.prompt_format = prompt_format_guess(model_path)
-        self.model = Llama(model_path=str(model_path))
+    def __init__(self, model: "BaseChatModel"):
+        self.model = model
 
     async def generate_async(
         self,
@@ -101,45 +37,53 @@ class LLM:
         Generates a response asynchronously. If chunk_writer is provided, it
         will be called with each chunk of the response as it is generated.
         """
-        prompt = self.prompt_format.with_instruction(instruction)
+        prompt = [("user", instruction)]
         if chunk_writer is not None:
             assert asyncio.iscoroutinefunction(chunk_writer)
-            accumulated_text = ""
-            for result in self.model(prompt, stream=True, **kwargs):
-                print(result)
-                text = result["choices"][0]["text"]
-                accumulated_text += text
-                await chunk_writer(text)
-                if asyncio.current_task().cancelled():
+            accumulated_text = None
+            async for result in self.model.astream(prompt, **kwargs):
+                logging.debug(result)
+                if result.content:
+                    text: str = str(result.content)
+                    if accumulated_text is None:
+                        accumulated_text = result
+                    else:
+                        accumulated_text += result
+                    await chunk_writer(text)
+                current_task = asyncio.current_task()
+                if current_task and current_task.cancelled():
                     break
-            return accumulated_text
+            return str(accumulated_text.content) if accumulated_text is not None else ""
 
-        result = self.model(prompt, **kwargs)
-        return result["choices"][0]["text"]
+        result = await self.model.ainvoke(prompt, **kwargs)
+        return str(result.content)
 
 
 async def print_async(text: str) -> None:
     """
     Prints text asynchronously.
     """
-    print(text)
+    print(text, end="")
 
 
 if __name__ == "__main__":
+    import langchain_openai
+    import pydantic
+
+    logging.basicConfig(level=logging.WARNING)
+
     llm = LLM(
-        Path(
-            "/home/mdupree/oobabooga_linux/models/chupacabra-7b-v3.Q4_K_M.gguf"
+        langchain_openai.ChatOpenAI(
+            base_url="http://localhost:8080", api_key=pydantic.SecretStr("boo")
         )
     )
 
-    print(
-        asyncio.run(
-            llm.generate_async(
-                '### Instruction:\nSay "Moo" and nothing else.\n\n### Response:',
-                max_tokens=16,
-                chunk_writer=print_async,
-            )
+    result = asyncio.run(
+        llm.generate_async(
+            'Say "Moo" as many times as you like, then comment on the experience.',
+            chunk_writer=print_async,
+            max_tokens=16,
         )
     )
-
-    print("Done.")
+    print("\n===FINAL OUTPUT===")
+    print(result)

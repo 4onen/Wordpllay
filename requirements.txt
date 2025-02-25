@@ -1,3 +1,5 @@
 aiohttp
 jinja2
-llama-cpp-python
+langchain
+langchain-openai
+python-dotenv
